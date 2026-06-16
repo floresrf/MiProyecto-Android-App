@@ -1,25 +1,46 @@
 package com.example.miproyecto
 
+import android.app.AlertDialog
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
+import android.widget.Toast
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.android.volley.Request
+import com.android.volley.toolbox.JsonArrayRequest
+import com.android.volley.toolbox.JsonObjectRequest
+import com.android.volley.toolbox.Volley
+import org.json.JSONObject
+import java.util.Calendar
 
-// TODO: Rename parameter arguments, choose names that match
-// the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
 private const val ARG_PARAM1 = "param1"
 private const val ARG_PARAM2 = "param2"
 
-/**
- * A simple [Fragment] subclass.
- * Use the [Fragmento2.newInstance] factory method to
- * create an instance of this fragment.
- */
 class Fragmento2 : Fragment() {
-    // TODO: Rename and change types of parameters
+
     private var param1: String? = null
     private var param2: String? = null
+
+    // URL base de tu Web API pública en Render
+    private val URL_API = "https://web-api-movil-rene.onrender.com/api/clientes"
+    
+    private lateinit var etClave: EditText
+    private lateinit var etNombre: EditText
+    private lateinit var etEdad: EditText
+    private lateinit var etFechaNacimiento: EditText
+    private lateinit var btnNuevo: Button
+    private lateinit var btnGuardar: Button
+    private lateinit var btnEliminar: Button
+    private lateinit var rvClientes: RecyclerView
+
+    private var existeCliente: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,16 +58,174 @@ class Fragmento2 : Fragment() {
         return inflater.inflate(R.layout.fragment_fragmento2, container, false)
     }
 
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        etClave = view.findViewById(R.id.etClave)
+        etNombre = view.findViewById(R.id.etNombre)
+        etEdad = view.findViewById(R.id.etEdad)
+        etFechaNacimiento = view.findViewById(R.id.etFechaNacimiento)
+        btnNuevo = view.findViewById(R.id.btnNuevo)
+        btnGuardar = view.findViewById(R.id.btnGuardar)
+        btnEliminar = view.findViewById(R.id.btnEliminar)
+        rvClientes = view.findViewById(R.id.rvClientes)
+
+        rvClientes.layoutManager = LinearLayoutManager(requireContext())
+
+        // Cargar el Grid desde Render inmediatamente al abrir la pantalla
+        cargarGridClientes()
+
+        // Buscar clave automáticamente (Al perder el foco)
+        etClave.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val clave = etClave.text.toString().trim()
+                if (clave.isNotEmpty()) {
+                    buscarClientePorClave(clave)
+                }
+            }
+        }
+
+
+        // Nuevo (Limpiar pantalla)
+        btnNuevo.setOnClickListener {
+            limpiarPantalla()
+        }
+
+        // Guardar (Inserta con POST o actualiza con PUT en la nube)
+        btnGuardar.setOnClickListener {
+            ejecutarGuardarOActualizar()
+        }
+
+        // Eliminar (Con cuadro de diálogo de confirmación)
+        btnEliminar.setOnClickListener {
+            val clave = etClave.text.toString().trim()
+            if (clave.isNotEmpty()) {
+                AlertDialog.Builder(requireContext()).apply {
+                    setTitle("Confirmar eliminación")
+                    setMessage("¿Estás seguro de que deseas eliminar permanentemente al cliente con clave $clave?")
+                    setPositiveButton("Sí, eliminar") { _, _ ->
+                        eliminarClienteEnLaApi(clave)
+                    }
+                    setNegativeButton("Cancelar", null)
+                    show()
+                }
+            } else {
+                Toast.makeText(requireContext(), "Escribe una clave para eliminar", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun limpiarPantalla() {
+        etClave.setText("")
+        etNombre.setText("")
+        etEdad.setText("")
+        etFechaNacimiento.setText("")
+        etClave.isEnabled = true
+        existeCliente = false
+    }
+
+    // =======================================================
+    // CONEXIONES DE RED USANDO VOLLEY HACIA LA NUBE (RENDER)
+    // =======================================================
+
+    private fun buscarClientePorClave(clave: String) {
+        val queue = Volley.newRequestQueue(requireContext())
+        val url = "$URL_API/$clave"
+
+        val jsonObjectRequest = JsonObjectRequest(Request.Method.GET, url, null,
+            { response ->
+                val existe = response.getBoolean("existe")
+                if (existe) {
+                    existeCliente = true
+                    val cliente = response.getJSONObject("cliente")
+                    etNombre.setText(cliente.getString("nombre"))
+                    etEdad.setText(cliente.getInt("edad").toString())
+
+                    // Convierte AAAA-MM-DD de la API a AAAA/MM/DD para tu formulario
+                    val fechaApi = cliente.getString("fecha_nacimiento").split("T")[0]
+                    etFechaNacimiento.setText(fechaApi.replace("-", "/"))
+
+                    etClave.isEnabled = false // Congela el ID durante la edición
+                    Toast.makeText(requireContext(), "Cliente cargado", Toast.LENGTH_SHORT).show()
+                } else {
+                    existeCliente = false
+                }
+            },
+            { Toast.makeText(requireContext(), "Buscando...", Toast.LENGTH_SHORT).show() }
+        )
+        queue.add(jsonObjectRequest)
+    }
+
+    private fun ejecutarGuardarOActualizar() {
+        val clave = etClave.text.toString().trim()
+        val nombre = etNombre.text.toString().trim()
+        val edadStr = etEdad.text.toString().trim()
+        val fechaFormulario = etFechaNacimiento.text.toString().trim()
+
+        if (clave.isEmpty() || nombre.isEmpty() || edadStr.isEmpty() || fechaFormulario.length < 10) {
+            Toast.makeText(requireContext(), "Llena todos los campos correctamente", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // TRANSFORMACIÓN: De "AAAA/MM/DD" a "AAAA-MM-DD" para enviarlo en formato estándar JSON a Render
+        val fechaParaJson = fechaFormulario.replace("/", "-")
+
+        val jsonBody = JSONObject().apply {
+            put("clave", clave)
+            put("nombre", nombre)
+            put("edad", edadStr.toInt())
+            put("fecha_nacimiento", fechaParaJson)
+        }
+
+        val queue = Volley.newRequestQueue(requireContext())
+        val metodo = if (existeCliente) Request.Method.PUT else Request.Method.POST
+        val urlFinal = if (existeCliente) "$URL_API/$clave" else URL_API
+
+        val jsonObjectRequest = JsonObjectRequest(metodo, urlFinal, jsonBody,
+            { response ->
+                Toast.makeText(requireContext(), response.getString("mensaje"), Toast.LENGTH_SHORT).show()
+                limpiarPantalla()
+                cargarGridClientes() // Refresca automáticamente el Grid inferior
+            },
+            { Toast.makeText(requireContext(), "Error al guardar registro", Toast.LENGTH_SHORT).show() }
+        )
+        queue.add(jsonObjectRequest)
+    }
+
+    private fun eliminarClienteEnLaApi(clave: String) {
+        val queue = Volley.newRequestQueue(requireContext())
+        val url = "$URL_API/$clave"
+
+        val jsonObjectRequest = JsonObjectRequest(Request.Method.DELETE, url, null,
+            { response ->
+                Toast.makeText(requireContext(), response.getString("mensaje"), Toast.LENGTH_SHORT).show()
+                limpiarPantalla()
+                cargarGridClientes() // Actualiza los cambios en el Grid
+            },
+            { Toast.makeText(requireContext(), "Error al eliminar de la BD", Toast.LENGTH_SHORT).show() }
+        )
+        queue.add(jsonObjectRequest)
+    }
+
+    private fun cargarGridClientes() {
+        val queue = Volley.newRequestQueue(requireContext())
+
+        val jsonArrayRequest = JsonArrayRequest(Request.Method.GET, URL_API, null,
+            { response ->
+
+            },
+            { Toast.makeText(requireContext(), "Sincronizando catálogo...", Toast.LENGTH_SHORT).show() }
+        )
+        queue.add(jsonArrayRequest)
+    }
+
+    // ==========================================
+    // FORMATO FECHA (AAAA/MM/DD) POR HACER
+    // ==========================================
+
+
+    // Companion object original mantenido intacto
     companion object {
-        /**
-         * Use this factory method to create a new instance of
-         * this fragment using the provided parameters.
-         *
-         * @param param1 Parameter 1.
-         * @param param2 Parameter 2.
-         * @return A new instance of fragment Fragmento2.
-         */
-        // TODO: Rename and change types and number of parameters
         @JvmStatic
         fun newInstance(param1: String, param2: String) =
             Fragmento2().apply {
