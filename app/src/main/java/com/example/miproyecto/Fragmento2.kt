@@ -28,7 +28,6 @@ class Fragmento2 : Fragment() {
     private var param1: String? = null
     private var param2: String? = null
 
-    // URL base de tu Web API pública en Render
     private val URL_API = "https://web-api-movil-rene.onrender.com/api/clientes"
     
     private lateinit var etClave: EditText
@@ -200,7 +199,7 @@ class Fragmento2 : Fragment() {
             { response ->
                 Toast.makeText(requireContext(), response.getString("mensaje"), Toast.LENGTH_SHORT).show()
                 limpiarPantalla()
-                cargarGridClientes() // Actualiza los cambios en el Grid
+                cargarGridClientes()
             },
             { Toast.makeText(requireContext(), "Error al eliminar de la BD", Toast.LENGTH_SHORT).show() }
         )
@@ -213,8 +212,29 @@ class Fragmento2 : Fragment() {
         val jsonArrayRequest = JsonArrayRequest(Request.Method.GET, URL_API, null,
             { response ->
 
+                val adapter = ClientesAdapter(response) { clienteSeleccionado ->
+
+                    etClave.setText(clienteSeleccionado.getString("clave"))
+                    etNombre.setText(clienteSeleccionado.getString("nombre"))
+
+
+                    if (clienteSeleccionado.has("edad")) {
+                        etEdad.setText(clienteSeleccionado.getInt("edad").toString())
+                    }
+
+                    if (clienteSeleccionado.has("fecha_nacimiento")) {
+                        val fechaApi = clienteSeleccionado.getString("fecha_nacimiento").split("T")[0]
+                        etFechaNacimiento.setText(fechaApi.replace("-", "/"))
+                    }
+                    existeCliente = true
+                    etClave.isEnabled = false
+                }
+
+                rvClientes.adapter = adapter
             },
-            { Toast.makeText(requireContext(), "Sincronizando catálogo...", Toast.LENGTH_SHORT).show() }
+            { error ->
+                Toast.makeText(requireContext(), "Error al cargar catálogo en red", Toast.LENGTH_SHORT).show()
+            }
         )
         queue.add(jsonArrayRequest)
     }
