@@ -100,7 +100,9 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:focusable="false"
+        android:clickable="true">
 
         <TextView
             android:id="@+id/lblFecha"
@@ -119,7 +121,11 @@
             android:inputType="date"
             android:maxLength="10"
             android:minHeight="48dp"
-            android:padding="8dp" />
+            android:padding="8dp"
+            android:focusable="false"
+            android:clickable="true"
+            android:drawableEnd="@drawable/baseline_calendar_month_24"
+            android:drawableTint="#000000" />
     </LinearLayout>
 
     <LinearLayout

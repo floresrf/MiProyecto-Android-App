@@ -1,6 +1,7 @@
 package com.example.miproyecto
 
 import android.app.AlertDialog
+import android.app.DatePickerDialog
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -29,7 +30,7 @@ class Fragmento2 : Fragment() {
     private var param2: String? = null
 
     private val URL_API = "https://web-api-movil-rene.onrender.com/api/clientes"
-    
+
     private lateinit var etClave: EditText
     private lateinit var etNombre: EditText
     private lateinit var etEdad: EditText
@@ -84,6 +85,31 @@ class Fragmento2 : Fragment() {
             }
         }
 
+        // ==========================================
+        // EVENTO: Mostrar Calendario al dar clic
+        // ==========================================
+        etFechaNacimiento.setOnClickListener {
+            val calendar = Calendar.getInstance()
+            val añoActual = calendar.get(Calendar.YEAR)
+            val mesActual = calendar.get(Calendar.MONTH)
+            val díaActual = calendar.get(Calendar.DAY_OF_MONTH)
+
+            val datePicker = DatePickerDialog(
+                requireContext(),
+                { _, añoSeleccionado, mesSeleccionado, díaSeleccionado ->
+                    // Formateamos mes y día con ceros a la izquierda si son menores a 10
+                    val mesFormateado = String.format("%02d", mesSeleccionado + 1)
+                    val díaFormateado = String.format("%02d", díaSeleccionado)
+
+                    // Setea el texto en el formato visual AAAA/MM/DD
+                    etFechaNacimiento.setText("$añoSeleccionado/$mesFormateado/$díaFormateado")
+                },
+                añoActual,
+                mesActual,
+                díaActual
+            )
+            datePicker.show()
+        }
 
         // Nuevo (Limpiar pantalla)
         btnNuevo.setOnClickListener {
@@ -217,7 +243,6 @@ class Fragmento2 : Fragment() {
                     etClave.setText(clienteSeleccionado.getString("clave"))
                     etNombre.setText(clienteSeleccionado.getString("nombre"))
 
-
                     if (clienteSeleccionado.has("edad")) {
                         etEdad.setText(clienteSeleccionado.getInt("edad").toString())
                     }
@@ -239,12 +264,6 @@ class Fragmento2 : Fragment() {
         queue.add(jsonArrayRequest)
     }
 
-    // ==========================================
-    // FORMATO FECHA (AAAA/MM/DD) POR HACER
-    // ==========================================
-
-
-    // Companion object original mantenido intacto
     companion object {
         @JvmStatic
         fun newInstance(param1: String, param2: String) =
